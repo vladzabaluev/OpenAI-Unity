@@ -79,14 +79,7 @@ namespace OpenAI
 
                 while (!asyncOperation.isDone) await Task.Yield();
 
-                try
-                {
-                    data = JsonConvert.DeserializeObject<T>(request.downloadHandler.text.Replace, jsonSerializerSettings);
-                }
-                catch (JsonReaderException ex)
-                {
-                    Console.WriteLine($"Ошибка десериализации JSON: {ex.Message}");
-                }
+                data = JsonConvert.DeserializeObject<T>(request.downloadHandler.text.Replace("<", "").Replace(">", ""), jsonSerializerSettings);
             }
 
             if (data?.Error != null)
