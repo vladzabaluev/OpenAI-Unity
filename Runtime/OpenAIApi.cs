@@ -78,8 +78,16 @@ namespace OpenAI
                 var asyncOperation = request.SendWebRequest();
 
                 while (!asyncOperation.isDone) await Task.Yield();
+                try
+                {
+                    data = JsonConvert.DeserializeObject<T>(request.downloadHandler.text.Replace("<", "").Replace(">", ""), jsonSerializerSettings);
+                }
+                catch (JsonReaderException ex)
+                {
+                    // Обработка ошибки десериализации
+                    Debug.Log($"Ошибка десериализации JSON: {ex.Message}");
+                }
 
-                data = JsonConvert.DeserializeObject<T>(request.downloadHandler.text.Replace("<", "").Replace(">", ""), jsonSerializerSettings);
             }
 
             if (data?.Error != null)
@@ -92,6 +100,7 @@ namespace OpenAI
             {
                 Debug.LogWarning(data.Warning);
             }
+
 
             return data;
         }
