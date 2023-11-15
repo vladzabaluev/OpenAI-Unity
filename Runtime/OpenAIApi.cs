@@ -68,7 +68,7 @@ namespace OpenAI
         /// <returns>A Task containing the response from the request as the specified type.</returns>
         private async Task<T> DispatchRequest<T>(string path, string method, byte[] payload = null) where T : IResponse
         {
-            T data;
+            T data = default(T);
 
             using (var request = UnityWebRequest.Put(path, payload))
             {
