@@ -80,7 +80,7 @@ namespace OpenAI
                 while (!asyncOperation.isDone) await Task.Yield();
                 try
                 {
-                    data = JsonConvert.DeserializeObject<T>(request.downloadHandler.text.Replace("<", "").Replace(">", ""), jsonSerializerSettings);
+                    data = JsonConvert.DeserializeObject<T>(request.downloadHandler.text, jsonSerializerSettings);
                 }
                 catch (JsonReaderException ex)
                 {
