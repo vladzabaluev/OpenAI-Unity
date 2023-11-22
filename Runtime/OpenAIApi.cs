@@ -78,16 +78,19 @@ namespace OpenAI
                 var asyncOperation = request.SendWebRequest();
 
                 while (!asyncOperation.isDone) await Task.Yield();
+
                 try
                 {
-                    data = JsonConvert.DeserializeObject<T>(request.downloadHandler.text, jsonSerializerSettings);
+                    if (request.result == UnityWebRequest.Result.Success)
+                        data = JsonConvert.DeserializeObject<T>(request.downloadHandler.text, jsonSerializerSettings);
+                    else
+                        Debug.Log(request.error);
                 }
                 catch (JsonReaderException ex)
                 {
                     // Обработка ошибки десериализации
                     Debug.Log($"Ошибка десериализации JSON: {ex.Message}");
                 }
-
             }
 
             if (data?.Error != null)
@@ -100,7 +103,6 @@ namespace OpenAI
             {
                 Debug.LogWarning(data.Warning);
             }
-
 
             return data;
         }
