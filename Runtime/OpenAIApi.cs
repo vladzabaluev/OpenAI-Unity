@@ -10,6 +10,8 @@ using UnityEngine.Networking;
 using System.Collections.Generic;
 using Newtonsoft.Json.Serialization;
 using System.Linq;
+using Newtonsoft.Json.Linq;
+using System.Text.RegularExpressions;
 
 namespace OpenAI
 {
@@ -50,11 +52,13 @@ namespace OpenAI
         private readonly JsonSerializerSettings jsonSerializerSettings = new JsonSerializerSettings()
         {
             NullValueHandling = NullValueHandling.Ignore,
+            MetadataPropertyHandling = MetadataPropertyHandling.Ignore,
+            DateParseHandling = DateParseHandling.None,
             ContractResolver = new DefaultContractResolver()
             {
                 NamingStrategy = new CustomNamingStrategy()
             },
-            MissingMemberHandling = MissingMemberHandling.Error,
+            MissingMemberHandling = MissingMemberHandling.Ignore,
             Culture = CultureInfo.InvariantCulture
         };
 
@@ -66,14 +70,16 @@ namespace OpenAI
         /// <param name="payload">An optional byte array of json payload to include in the request.</param>
         /// <typeparam name="T">Response type of the request.</typeparam>
         /// <returns>A Task containing the response from the request as the specified type.</returns>
-        private async Task<T> DispatchRequest<T>(string path, string method, byte[] payload = null) where T : IResponse
+        private async Task<T> DispatchRequest<T>(string path, string method, byte[] payload = null, bool isBeta = false) where T : IResponse
         {
             T data = default(T);
-
+            Debug.Log(path);
             using (var request = UnityWebRequest.Put(path, payload))
             {
                 request.method = method;
                 request.SetHeaders(Configuration, ContentType.ApplicationJson);
+                if (isBeta)
+                    request.SetRequestHeader("OpenAI-Beta", "assistants=v2");
 
                 var asyncOperation = request.SendWebRequest();
 
@@ -81,6 +87,8 @@ namespace OpenAI
 
                 try
                 {
+                    Debug.Log(request.downloadHandler.text);
+
                     if (request.result == UnityWebRequest.Result.Success)
                         data = JsonConvert.DeserializeObject<T>(request.downloadHandler.text, jsonSerializerSettings);
                     else
@@ -116,49 +124,98 @@ namespace OpenAI
         /// <param name="onComplete">A callback function to be called when the request is complete.</param>
         /// <param name="token">A cancellation token to cancel the request.</param>
         /// <param name="payload">An optional byte array of json payload to include in the request.</param>
-        private async void DispatchRequest<T>(string path, string method, Action<List<T>> onResponse, Action onComplete, CancellationTokenSource token, byte[] payload = null) where T : IResponse
+        private async void DispatchRequest<T>(string path, string method, Action<List<T>> onResponse, Action<string> onComplete, CancellationTokenSource token, byte[] payload = null, bool isBeta = false) where T : IResponse
         {
             using (var request = UnityWebRequest.Put(path, payload))
             {
                 request.method = method;
                 request.SetHeaders(Configuration, ContentType.ApplicationJson);
-
+                if (isBeta)
+                    request.SetRequestHeader("OpenAI-Beta", "assistants=v2");
                 var asyncOperation = request.SendWebRequest();
+                string run_id = null;
 
                 do
                 {
+                    //if (token.IsCancellationRequested) return;
                     List<T> dataList = new List<T>();
-                    string[] lines = request.downloadHandler.text.Split('\n').Where(line => line != "").ToArray();
-
-                    foreach (string line in lines)
+                    List<string> lines = request.downloadHandler.text.Split('\n').Where(line => line != "").ToList();
+                    if (lines.Count > 0)
                     {
-                        var value = line.Replace("data: ", "");
+                        //Debug.Log(request.downloadHandler.text);
 
-                        if (value.Contains("[DONE]"))
+                        foreach (string line in lines)
                         {
-                            onComplete?.Invoke();
-                            break;
-                        }
+                            string value = line;
+                            if (line.Contains("event: "))
+                            {
+                                //Debug.Log(line);
+                                continue;
+                            }
+                            value = line.Replace("data: ", "");
 
-                        var data = JsonConvert.DeserializeObject<T>(value, jsonSerializerSettings);
+                            if (value.Contains("[DONE]"))
+                            {
+                                onComplete?.Invoke(("ddd"));
+                                break;
+                            }
 
-                        if (data?.Error != null)
-                        {
-                            ApiError error = data.Error;
-                            Debug.LogError($"Error Message: {error.Message}\nError Type: {error.Type}\n");
+                            if (isBeta)
+                            {
+                                //Debug.Log(value);
+                                if (value.Contains("run_"))
+                                {
+                                    string pattern = "\"id\":\"(run_[^\"]+)\"";
+
+                                    // Поиск соответствия регулярному выражению в строке JSON
+                                    Match match = Regex.Match(value, pattern);
+
+                                    // Извлечение id, если соответствие найдено
+                                    if (match.Success)
+                                    {
+                                        run_id = match.Groups[1].Value;
+                                    }
+                                }
+                                //Debug.Log(value);
+                                if (!value.Contains("thread.message.delta")) continue;
+
+                                var data = JsonConvert.DeserializeObject<T>(value, jsonSerializerSettings);
+                                //Debug.Log(value);
+
+                                if (data?.Error != null)
+                                {
+                                    ApiError error = data.Error;
+                                    Debug.LogError($"Error Message: {error.Message}\nError Type: {error.Type}\n");
+                                }
+                                else
+                                {
+                                    dataList.Add(data);
+                                }
+                            }
+                            else
+                            {
+                                var data = JsonConvert.DeserializeObject<T>(value, jsonSerializerSettings);
+
+                                if (data?.Error != null)
+                                {
+                                    ApiError error = data.Error;
+                                    Debug.LogError($"Error Message: {error.Message}\nError Type: {error.Type}\n");
+                                }
+                                else
+                                {
+                                    dataList.Add(data);
+                                }
+                            }
                         }
-                        else
-                        {
-                            dataList.Add(data);
-                        }
+                        if (dataList.Count > 0)
+                            onResponse?.Invoke(dataList);
+
+                        await Task.Yield();
                     }
-                    onResponse?.Invoke(dataList);
-
-                    await Task.Yield();
                 }
                 while (!asyncOperation.isDone && !token.IsCancellationRequested);
 
-                onComplete?.Invoke();
+                onComplete?.Invoke(run_id);
             }
         }
 
@@ -169,10 +226,9 @@ namespace OpenAI
         /// <param name="form">A multi-part data form to upload with the request.</param>
         /// <typeparam name="T">Response type of the request.</typeparam>
         /// <returns>A Task containing the response from the request as the specified type.</returns>
-        private async Task<T> DispatchRequest<T>(string path, List<IMultipartFormSection> form) where T : IResponse
+        private async Task<T> DispatchRequest<T>(string path, List<IMultipartFormSection> form, Action onSomeError = null) where T : IResponse, new()
         {
-            T data;
-
+            T data = new T();
             using (var request = new UnityWebRequest(path, "POST"))
             {
                 request.SetHeaders(Configuration);
@@ -183,9 +239,39 @@ namespace OpenAI
                 request.downloadHandler = new DownloadHandlerBuffer();
                 var asyncOperation = request.SendWebRequest();
 
-                while (!asyncOperation.isDone) await Task.Yield();
+                while (!asyncOperation.isDone)
+                {
+                    //Debug.Log(asyncOperation.progress);
+                    await Task.Yield();
+                }
 
-                data = JsonConvert.DeserializeObject<T>(request.downloadHandler.text, jsonSerializerSettings);
+                if (request.result != UnityWebRequest.Result.Success)
+                {
+                    Debug.LogError("Ошибка при выполнении запроса: " + request.result);
+
+                    onSomeError?.Invoke();
+
+                    return data;
+                }
+                Debug.Log(request.downloadHandler.text);
+                try
+                {
+                    data = JsonConvert.DeserializeObject<T>(request.downloadHandler.text, jsonSerializerSettings);
+                }
+                catch (JsonSerializationException ex)
+                {
+                    Debug.LogError("Ошибка при десериализации запроса: " + ex.Message);
+
+                    onSomeError?.Invoke();
+                    return data;
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError("Ошибка: " + ex.Message);
+
+                    onSomeError?.Invoke();
+                    return data;
+                }
             }
 
             if (data != null && data.Error != null)
@@ -248,7 +334,7 @@ namespace OpenAI
         /// <param name="onResponse">Callback function that will be called when stream response is updated.</param>
         /// <param name="onComplete">Callback function that will be called when stream response is completed.</param>
         /// <param name="token">Cancellation token to cancel the request.</param>
-        public void CreateCompletionAsync(CreateCompletionRequest request, Action<List<CreateCompletionResponse>> onResponse, Action onComplete, CancellationTokenSource token)
+        public void CreateCompletionAsync(CreateCompletionRequest request, Action<List<CreateCompletionResponse>> onResponse, Action<string> onComplete, CancellationTokenSource token)
         {
             request.Stream = true;
             var path = $"{BASE_PATH}/completions";
@@ -277,7 +363,7 @@ namespace OpenAI
         /// <param name="onResponse">Callback function that will be called when stream response is updated.</param>
         /// <param name="onComplete">Callback function that will be called when stream response is completed.</param>
         /// <param name="token">Cancellation token to cancel the request.</param>
-        public void CreateChatCompletionAsync(CreateChatCompletionRequest request, Action<List<CreateChatCompletionResponse>> onResponse, Action onComplete, CancellationTokenSource token)
+        public void CreateChatCompletionAsync(CreateChatCompletionRequest request, Action<List<CreateChatCompletionResponse>> onResponse, Action<string> onComplete, CancellationTokenSource token)
         {
             request.Stream = true;
             var path = $"{BASE_PATH}/chat/completions";
@@ -372,6 +458,7 @@ namespace OpenAI
             var path = $"{BASE_PATH}/audio/transcriptions";
 
             var form = new List<IMultipartFormSection>();
+
             if (string.IsNullOrEmpty(request.File))
             {
                 form.AddData(request.FileData, "file", $"audio/{Path.GetExtension(request.File)}");
@@ -386,7 +473,14 @@ namespace OpenAI
             form.AddValue(request.Temperature, "temperature");
             form.AddValue(request.Language, "language");
 
-            return await DispatchRequest<CreateAudioResponse>(path, form);
+            var result = await DispatchRequest<CreateAudioResponse>(path, form);
+
+            if (result.Error != null)
+            {
+                Debug.Log(result.Error);
+            }
+
+            return result;
         }
 
         /// <summary>
@@ -557,6 +651,91 @@ namespace OpenAI
             var path = $"{BASE_PATH}/moderations";
             var payload = CreatePayload(request);
             return await DispatchRequest<CreateModerationResponse>(path, UnityWebRequest.kHttpVerbPOST, payload);
+        }
+
+        public async Task<ThreadResponse> CreateThread(CreateThreadRequest request)
+        {
+            var path = $"{BASE_PATH}/threads";
+            var payload = CreatePayload(request);
+
+            return await DispatchRequest<ThreadResponse>(path, UnityWebRequest.kHttpVerbPOST, payload, true);
+        }
+
+        public async Task<ThreadResponse> RetrieveThread(string threadId)
+        {
+            var path = $"{BASE_PATH}/threads/{threadId}";
+
+            return await DispatchRequest<ThreadResponse>(path, UnityWebRequest.kHttpVerbGET, isBeta: true);
+        }
+
+        public async Task<DeleteResponse> DeleteThread(string threadId)
+        {
+            var path = $"{BASE_PATH}/threads/{threadId}";
+            return await DispatchRequest<DeleteResponse>(path, UnityWebRequest.kHttpVerbDELETE, isBeta: true);
+        }
+
+        public async Task<MessageResponse> CreateMessage(string threadId, CreateMessageRequest request)
+        {
+            var path = $"{BASE_PATH}/threads/{threadId}/messages";
+            var payload = CreatePayload(request);
+            MessageResponse message = await DispatchRequest<MessageResponse>(path, UnityWebRequest.kHttpVerbPOST, payload, true);
+
+            return message;
+        }
+
+        public async Task<List<MessageResponse>> RetrieveMessages(string threadId)
+        {
+            var path = $"{BASE_PATH}/threads/{threadId}/messages";
+
+            var run = await DispatchRequest<MessageListResponce>(path, UnityWebRequest.kHttpVerbGET, isBeta: true);
+            Debug.Log(run.Data.Count);
+            return run.Data;
+        }
+
+        public async Task<RunResponse> CreateRun(string threadId, CreateRunRequest request)
+        {
+            var path = $"{BASE_PATH}/threads/{threadId}/runs";
+            var payload = CreatePayload(request);
+            RunResponse run = await DispatchRequest<RunResponse>(path, UnityWebRequest.kHttpVerbPOST, payload, isBeta: true);
+            Debug.Log(run.ThreadId);
+            return run;
+        }
+
+        public void CreateRunAsync(string threadId, CreateRunRequest request, Action<List<MessageDelta>> onResponse, Action<string> onComplete, CancellationTokenSource token)
+        {
+            var path = $"{BASE_PATH}/threads/{threadId}/runs";
+            request.Stream = true;
+
+            var payload = CreatePayload(request);
+
+            DispatchRequest(path, UnityWebRequest.kHttpVerbPOST, onResponse, onComplete, token, payload, isBeta: true);
+        }
+
+        public async Task<RunResponse> CreateThreadAndRun(CreateThreadRunRequest request)
+        {
+            var path = $"{BASE_PATH}/threads/runs";
+            var payload = CreatePayload(request);
+            RunResponse run = await DispatchRequest<RunResponse>(path, UnityWebRequest.kHttpVerbPOST, payload, isBeta: true); ;
+            Debug.Log(run.ThreadId);
+            return run;
+        }
+
+        public async Task<RunResponse> RetrieveRun(string threadId, string runId)
+        {
+            var path = $"{BASE_PATH}/threads/{threadId}/runs/{runId}";
+
+            var run = await DispatchRequest<RunResponse>(path, UnityWebRequest.kHttpVerbGET, isBeta: true);
+
+            return run;
+        }
+
+        public async Task<RunResponse> CancelRun(string threadId, string runId)
+        {
+            var path = $"{BASE_PATH}/threads/{threadId}/runs/{runId}/cancel";
+
+            var run = await DispatchRequest<RunResponse>(path, UnityWebRequest.kHttpVerbGET, isBeta: true);
+
+            return run;
         }
     }
 }

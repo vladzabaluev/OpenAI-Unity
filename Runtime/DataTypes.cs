@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Newtonsoft.Json;
+using OpenAI;
 
 namespace OpenAI
 {
@@ -40,7 +41,7 @@ namespace OpenAI
 
     public class ApiError
     {
-        public string Message;
+        public string Message = "NetworkConnection";
         public string Type;
         public object Param;
         public object Code;
@@ -102,7 +103,7 @@ namespace OpenAI
         public string User { get; set; }
     }
 
-    public struct CreateChatCompletionResponse : IResponse
+    public class CreateChatCompletionResponse : IResponse
     {
         public ApiError Error { get; set; }
         public string Warning { get; set; }
@@ -113,18 +114,31 @@ namespace OpenAI
         public List<ChatChoice> Choices { get; set; }
         public Usage Usage { get; set; }
         public string SystemFingerprint { get; set; }
+
+        public CreateChatCompletionResponse()
+        {
+            ChatChoice chatChoice = new ChatChoice();
+            this.Choices = new List<ChatChoice>() { chatChoice };
+        }
     }
 
-    public struct ChatChoice
+    public class ChatChoice
     {
         public ChatMessage Message { get; set; }
         public ChatMessage Delta { get; set; }
         public int? Index { get; set; }
         public string FinishReason { get; set; }
         public bool Logprobs { get; set; }
+
+        public ChatChoice()
+        {
+            ChatMessage message = new ChatMessage();
+            message.Content = "Ошибка интернет-соединения";
+            this.Message = message;
+        }
     }
 
-    public struct ChatMessage
+    public class ChatMessage
     {
         public string Role { get; set; }
         public string Content { get; set; }
@@ -134,10 +148,16 @@ namespace OpenAI
 
     #region Audio Transcriptions Data Types
 
-    public struct FileData
+    public class FileData
     {
         public byte[] Data;
         public string Name;
+
+        public FileData(byte[] data, string name)
+        {
+            Data = data;
+            Name = name;
+        }
     }
 
     public class CreateAudioRequestBase
@@ -158,11 +178,14 @@ namespace OpenAI
     public class CreateAudioTranslationRequest : CreateAudioRequestBase
     { }
 
-    public struct CreateAudioResponse : IResponse
+    public class CreateAudioResponse : IResponse
     {
         public ApiError Error { get; set; }
         public string Warning { get; set; }
         public string Text { get; set; }
+
+        public CreateAudioResponse()
+        { this.Text = "Ошибка интернет-соединения"; }
     }
 
     #endregion Audio Transcriptions Data Types
@@ -189,7 +212,7 @@ namespace OpenAI
         public string User { get; set; }
     }
 
-    public struct CreateCompletionResponse : IResponse
+    public class CreateCompletionResponse : IResponse
     {
         public ApiError Error { get; set; }
         public string Warning { get; set; }
@@ -199,6 +222,13 @@ namespace OpenAI
         public string Model { get; set; }
         public List<Choice> Choices { get; set; }
         public Usage Usage { get; set; }
+
+        public CreateCompletionResponse()
+        {
+            Choice choice = new Choice();
+            choice.Text = "Ошибка интернет-соединения";
+            this.Choices = new List<Choice> { };
+        }
     }
 
     #endregion Completions API Data Types
@@ -312,7 +342,7 @@ namespace OpenAI
         public List<OpenAIFile> Data { get; set; }
     }
 
-    public struct DeleteResponse : IResponse
+    public class DeleteResponse : IResponse
     {
         public ApiError Error { get; set; }
         public string Warning { get; set; }
@@ -474,3 +504,223 @@ public static class ModerationModel
 }
 
 #endregion Static String Types
+
+#region Assistan API Data Types
+
+public class CreateMessageRequest : ChatMessage
+{
+    public List<string> FileIds { get; set; }
+}
+
+public class CreateThreadRequest
+{
+    public List<CreateMessageRequest> Messages { get; set; }
+}
+
+public class ThreadResponse : IResponse
+{
+    public ApiError Error { get; set; }
+    public string Warning { get; set; }
+    public string Id { get; set; }
+    public string Object { get; set; }
+    public int CreatedAt { get; set; }
+}
+
+public class MessageResponse : IResponse
+{
+    public ApiError Error { get; set; }
+    public string Warning { get; set; }
+    public string Id { get; set; }
+    public string Object { get; set; }
+    public int CreatedAt { get; set; }
+    public string ThreadId { get; set; }
+    public string Status { get; set; }
+    public int? CompletedAt { get; set; }
+    public int? IncompleteAt { get; set; }
+    public string Role { get; set; }
+
+    public List<Content> Content { get; set; }
+
+    public string AssistantId { get; set; }
+    public string RunId { get; set; }
+
+    public List<OpenAIFile> OpenAIFiles { get; set; }
+
+    public MessageResponse()
+    {
+        this.Content = new List<Content>() { new Content() };
+    }
+}
+
+public class MessageListResponce : IResponse
+{
+    public ApiError Error { get; set; }
+    public string Warning { get; set; }
+
+    [JsonProperty("object")]
+    public string Object { get; set; }
+
+    [JsonProperty("data")]
+    public List<MessageResponse> Data { get; set; }
+
+    [JsonProperty("first_id")]
+    public string FirstId { get; set; }
+
+    [JsonProperty("last_id")]
+    public string LastId { get; set; }
+
+    [JsonProperty("has_more")]
+    public bool HasMore { get; set; }
+}
+
+public class MessageFile
+{
+    public string Id { get; set; }
+    public string Object { get; set; }
+    public int CreatedAt { get; set; }
+
+    public int MessageId { get; set; }
+}
+
+public class MessageDelta : IResponse
+{
+    public ApiError Error { get; set; }
+    public string Warning { get; set; }
+    public string Id { get; set; }
+    public string Object { get; set; }
+
+    public DeltaMessageContent Delta { get; set; }
+}
+
+public partial class DeltaMessageContent
+{
+    [JsonProperty("content")]
+    public Content[] Content { get; set; }
+}
+
+public class CreateRunRequest
+{
+    public string AssistantId { get; set; }
+    public string Model { get; set; }
+    public string Instructions { get; set; }
+
+    public string AdditionalInstructions { get; set; }
+
+    public List<object> Tools { get; set; }
+    public float? Temperature { get; set; } = 0.7f;
+    public float? TopP { get; set; } = 1f;
+
+    public bool Stream { get; set; } = false;
+}
+
+public class RunResponse : IResponse
+{
+    public ApiError Error { get; set; }
+    public string Warning { get; set; }
+
+    [JsonProperty("id")]
+    public string Id { get; set; }
+
+    [JsonProperty("object")]
+    public string Object { get; set; }
+
+    [JsonProperty("created_at")]
+    public long CreatedAt { get; set; }
+
+    [JsonProperty("assistant_id")]
+    public string AssistantId { get; set; }
+
+    [JsonProperty("thread_id")]
+    public string ThreadId { get; set; }
+
+    [JsonProperty("status")]
+    public string Status { get; set; }
+
+    [JsonProperty("started_at")]
+    public long StartedAt { get; set; }
+
+    [JsonProperty("expires_at")]
+    public object ExpiresAt { get; set; }
+
+    [JsonProperty("cancelled_at")]
+    public object CancelledAt { get; set; }
+
+    [JsonProperty("failed_at")]
+    public object FailedAt { get; set; }
+
+    [JsonProperty("completed_at")]
+    public long CompletedAt { get; set; }
+
+    [JsonProperty("last_error")]
+    public object LastError { get; set; }
+
+    [JsonProperty("model")]
+    public string Model { get; set; }
+
+    [JsonProperty("instructions")]
+    public object Instructions { get; set; }
+
+    [JsonProperty("file_ids")]
+    public object[] FileIds { get; set; }
+
+    [JsonProperty("usage")]
+    public Usage Usage { get; set; }
+}
+
+public class CreateThreadRunRequest
+{
+    public string AssistantId { get; set; }
+
+    public CreateThreadRequest Thread { get; set; }
+    public string Model { get; set; }
+    public string Instructions { get; set; }
+    public float? Temperature { get; set; } = 0.7f;
+
+    public bool Stream { get; set; } = false;
+}
+
+public interface IFile
+{
+    public string Type { get; set; }
+}
+
+public partial class Content
+{
+    [JsonProperty("type")]
+    public string Type { get; set; }
+
+    [JsonProperty("text", NullValueHandling = NullValueHandling.Ignore)]
+    public TextAssistant Text { get; set; }
+
+    [JsonProperty("image_file", NullValueHandling = NullValueHandling.Ignore)]
+    public ImageFile ImageFile { get; set; }
+}
+
+public partial class ImageFile
+{
+    [JsonProperty("file_id")]
+    public string FileId { get; set; }
+}
+
+public partial class TextAssistant
+{
+    [JsonProperty("value")]
+    public string Value { get; set; } = "Ошибка интернет - соединения";
+
+    [JsonProperty("annotations")]
+    public List<object> Annotations { get; set; }
+}
+
+public class CreateStreamRunAsync : IResponse
+{
+    public ApiError Error { get; set; }
+    public string Warning { get; set; }
+
+    [JsonProperty("event")]
+    public string Event { get; set; }
+
+    [JsonProperty("data")]
+    public RunResponse Data { get; set; }
+}
+
+#endregion Assistan API Data Types
