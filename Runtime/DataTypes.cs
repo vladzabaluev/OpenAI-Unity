@@ -115,11 +115,11 @@ namespace OpenAI
         public Usage Usage { get; set; }
         public string SystemFingerprint { get; set; }
 
-        public CreateChatCompletionResponse()
-        {
-            ChatChoice chatChoice = new ChatChoice();
-            this.Choices = new List<ChatChoice>() { chatChoice };
-        }
+        //public CreateChatCompletionResponse()
+        //{
+        //    ChatChoice chatChoice = new ChatChoice();
+        //    this.Choices = new List<ChatChoice>() { chatChoice };
+        //}
     }
 
     public class ChatChoice
@@ -546,10 +546,10 @@ public class MessageResponse : IResponse
 
     public List<OpenAIFile> OpenAIFiles { get; set; }
 
-    public MessageResponse()
-    {
-        this.Content = new List<Content>() { new Content() };
-    }
+    //public MessageResponse()
+    //{
+    //    this.Content = new List<Content>() { new Content() };
+    //}
 }
 
 public class MessageListResponce : IResponse
