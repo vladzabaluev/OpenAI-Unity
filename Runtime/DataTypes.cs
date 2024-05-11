@@ -130,12 +130,12 @@ namespace OpenAI
         public string FinishReason { get; set; }
         public bool Logprobs { get; set; }
 
-        public ChatChoice()
-        {
-            ChatMessage message = new ChatMessage();
-            message.Content = "Ошибка интернет-соединения";
-            this.Message = message;
-        }
+        //public ChatChoice()
+        //{
+        //    ChatMessage message = new ChatMessage();
+        //    message.Content = "Ошибка интернет-соединения";
+        //    this.Message = message;
+        //}
     }
 
     public class ChatMessage
@@ -184,8 +184,8 @@ namespace OpenAI
         public string Warning { get; set; }
         public string Text { get; set; }
 
-        public CreateAudioResponse()
-        { this.Text = "Ошибка интернет-соединения"; }
+        //public CreateAudioResponse()
+        //{ this.Text = "Ошибка интернет-соединения"; }
     }
 
     #endregion Audio Transcriptions Data Types
@@ -223,12 +223,12 @@ namespace OpenAI
         public List<Choice> Choices { get; set; }
         public Usage Usage { get; set; }
 
-        public CreateCompletionResponse()
-        {
-            Choice choice = new Choice();
-            choice.Text = "Ошибка интернет-соединения";
-            this.Choices = new List<Choice> { };
-        }
+        //public CreateCompletionResponse()
+        //{
+        //    Choice choice = new Choice();
+        //    choice.Text = "Ошибка интернет-соединения";
+        //    this.Choices = new List<Choice> { };
+        //}
     }
 
     #endregion Completions API Data Types
@@ -705,7 +705,7 @@ public partial class ImageFile
 public partial class TextAssistant
 {
     [JsonProperty("value")]
-    public string Value { get; set; } = "Ошибка интернет - соединения";
+    public string Value { get; set; }/* = "Ошибка интернет - соединения";*/
 
     [JsonProperty("annotations")]
     public List<object> Annotations { get; set; }
