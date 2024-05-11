@@ -70,9 +70,9 @@ namespace OpenAI
         /// <param name="payload">An optional byte array of json payload to include in the request.</param>
         /// <typeparam name="T">Response type of the request.</typeparam>
         /// <returns>A Task containing the response from the request as the specified type.</returns>
-        private async Task<T> DispatchRequest<T>(string path, string method, byte[] payload = null, bool isBeta = false) where T : IResponse
+        private async Task<T> DispatchRequest<T>(string path, string method, byte[] payload = null, bool isBeta = false) where T : IResponse, new()
         {
-            T data = default(T);
+            T data = new T();
             Debug.Log(path);
             using (var request = UnityWebRequest.Put(path, payload))
             {
@@ -90,7 +90,9 @@ namespace OpenAI
                     Debug.Log(request.downloadHandler.text);
 
                     if (request.result == UnityWebRequest.Result.Success)
+                    {
                         data = JsonConvert.DeserializeObject<T>(request.downloadHandler.text, jsonSerializerSettings);
+                    }
                     else
                         Debug.Log(request.error);
                 }
