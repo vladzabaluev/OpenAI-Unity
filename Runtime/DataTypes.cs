@@ -608,7 +608,7 @@ public class CreateRunRequest
 
     public List<object> Tools { get; set; }
     public float? Temperature { get; set; } = 0.7f;
-    public float? TopP { get; set; } = 1f;
+    public float? TopP { get; set; } = 0.01f;
 
     public bool Stream { get; set; } = false;
 }
