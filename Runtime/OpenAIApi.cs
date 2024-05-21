@@ -269,7 +269,7 @@ namespace OpenAI
         /// <param name="form">A multi-part data form to upload with the request.</param>
         /// <typeparam name="T">Response type of the request.</typeparam>
         /// <returns>A Task containing the response from the request as the specified type.</returns>
-        protected async Task<T> DispatchRequest<T>(string path, List<IMultipartFormSection> form, Action<ErrorType> onRequestFailed = null) where T : IResponse, new()
+        protected async Task<T> DispatchRequest<T>(string path, List<IMultipartFormSection> form, ErrorType errorType = ErrorType.Default, Action<ErrorType> onRequestFailed = null) where T : IResponse, new()
         {
             const int maxRetries = 3; // Максимальное количество попыток
 
@@ -287,23 +287,27 @@ namespace OpenAI
                     request.uploadHandler = new UploadHandlerRaw(formSections) { contentType = contentType };
                     request.downloadHandler = new DownloadHandlerBuffer();
                     var asyncOperation = request.SendWebRequest();
-
+                    shouldRetry = false;
                     while (!asyncOperation.isDone)
                     {
                         //Debug.Log(asyncOperation.progress);
                         await Task.Yield();
                     }
 
-                    if (request.result != UnityWebRequest.Result.Success)
-                    {
-                        Debug.LogError("Ошибка при выполнении запроса: " + request.result);
-
-                        shouldRetry = true;
-                    }
                     Debug.Log(request.downloadHandler.text);
                     try
                     {
-                        data = JsonConvert.DeserializeObject<T>(request.downloadHandler.text, jsonSerializerSettings);
+                        if (request.result == UnityWebRequest.Result.Success)
+                        {
+                            data = JsonConvert.DeserializeObject<T>(request.downloadHandler.text, jsonSerializerSettings);
+                        }
+                        else
+                        {
+                            Debug.LogError("Ошибка при выполнении запроса: " + request.result);
+
+                            shouldRetry = true;
+                            await Task.Delay(100);
+                        }
                     }
                     catch (JsonSerializationException ex)
                     {
@@ -317,7 +321,7 @@ namespace OpenAI
                     }
                 }
 
-                if (data != null && data.Error != null)
+                if (data?.Error != null)
                 {
                     ApiError error = data.Error;
                     Debug.LogError($"Error Message: {error.Message}\nError Type: {error.Type}\n");
@@ -328,7 +332,13 @@ namespace OpenAI
 
             if (shouldRetry && attempt >= maxRetries)
             {
-                onRequestFailed?.Invoke(ErrorType.RequestFailed);
+                if (data?.Error == null)
+                {
+                    ApiError error = new ApiError();
+                    error.Message = "RequestFailed";
+                    data.Error = error;
+                }
+                ErrorHandler.SendRequestFailed(errorType);
             }
 
             return data;
@@ -504,7 +514,7 @@ namespace OpenAI
         /// </summary>
         /// <param name="request">See <see cref="CreateAudioTranscriptionsRequest"/></param>
         /// <returns>See <see cref="CreateAudioResponse"/></returns>
-        public async Task<CreateAudioResponse> CreateAudioTranscription(CreateAudioTranscriptionsRequest request, Action<ErrorType> onRequestFailed = null)
+        public async Task<CreateAudioResponse> CreateAudioTranscription(CreateAudioTranscriptionsRequest request)
         {
             var path = $"{BASE_PATH}/audio/transcriptions";
 
@@ -524,7 +534,7 @@ namespace OpenAI
             form.AddValue(request.Temperature, "temperature");
             form.AddValue(request.Language, "language");
 
-            var result = await DispatchRequest<CreateAudioResponse>(path, form, onRequestFailed);
+            var result = await DispatchRequest<CreateAudioResponse>(path, form, ErrorType.WhisperRequestFailed);
 
             if (result.Error != null)
             {
