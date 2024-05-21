@@ -11,7 +11,6 @@ using System.Collections.Generic;
 using Newtonsoft.Json.Serialization;
 using System.Linq;
 using System.Text.RegularExpressions;
-using UnityEditor.PackageManager;
 
 namespace OpenAI
 {
@@ -34,7 +33,6 @@ namespace OpenAI
                 //{
                 using (var request = UnityWebRequest.Put(path, payload))
                 {
-                    Debug.Log("op 1");
                     request.method = method;
 
                     request.SetHeaders(Configuration, ContentType.ApplicationJson);
@@ -61,17 +59,17 @@ namespace OpenAI
                                 if (line.Contains("event: "))
                                 {
                                     //value += ".failed";
-                                    if (line.Contains(".failed") || lines.Count > 60)
+                                    if (line.Contains(".failed") /*|| lines.Count > 60*/)
                                     {
-                                        if (attempt == 0)
-                                        {
-                                            //Debug.LogError(request.downloadHandler.text);
-                                            shouldRetry = true;
-                                            ErrorHandler.SendRunFailed();
-                                            await Task.Delay(2000);
-                                            //await Task.Delay(100);
-                                            break;
-                                        }
+                                        //if (attempt == 0)
+                                        //{
+                                        //Debug.LogError(request.downloadHandler.text);
+                                        shouldRetry = true;
+                                        ErrorHandler.SendRunFailed();
+                                        await Task.Delay(2000);
+                                        //await Task.Delay(100);
+                                        break;
+                                        //}
                                     }
                                     continue;
                                 }
